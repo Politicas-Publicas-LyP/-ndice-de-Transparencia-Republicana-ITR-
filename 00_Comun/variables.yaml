@@ -1,0 +1,57 @@
+# ITR — Definición declarativa de variables (FUENTE ÚNICA DE VERDAD).
+# La leen el ensamblador (icia_ensamblado.py) y los ensambladores de núcleo.
+# modo: suavizado (media móvil 12m) | sin_suavizar (estado binario/puntual) | arrastre (evento con decaimiento asimétrico)
+# nucleo: true si la variable entra en el ITR Núcleo (serie larga comparable).
+macro:
+  Ejecutivo: 0.30
+  Legislativo: 0.20
+  Judicial: 0.20
+  Prensa: 0.15
+  Banco Central: 0.15
+carry_meses: 3
+variables:
+  - {var: "DNU vs Leyes", eje: Ejecutivo, peso: 0.12, nucleo: true, comp: [
+      {archivo: dnu_leyes_mensual, col: cuota_dnu_12m, mejor: 0.05, peor: 0.70, peso_intra: 1.0, modo: suavizado}]}
+  - {var: "Discrecionalidad presup.", eje: Ejecutivo, peso: 0.13, nucleo: false, comp: [
+      {archivo: discrecionalidad_mensual, col: presupuesto_aprobado, mejor: 1, peor: 0, peso_intra: 0.6, modo: sin_suavizar},
+      {archivo: discrecionalidad_mensual, col: modif_12m, mejor: 5, peor: 12, peso_intra: 0.4, modo: suavizado}]}
+  - {var: "Transparencia (AIP)", eje: Ejecutivo, peso: 0.05, nucleo: false, comp: [
+      {archivo: transparencia_v2_mensual, col: tasa_respuesta, mejor: 0.95, peor: 0.30, peso_intra: 0.4, modo: suavizado},
+      {archivo: transparencia_v2_mensual, col: tasa_en_plazo, mejor: 0.90, peor: 0.20, peso_intra: 0.6, modo: suavizado}]}
+  - {var: "ATN (federalismo)", eje: Ejecutivo, peso: 0.06, nucleo: true, comp: [
+      {archivo: atn_mensual, col: atn_share, mejor: 0.001, peor: 0.007, peso_intra: 1.0, modo: suavizado}]}
+  - {var: "Eficacia de Control", eje: Legislativo, peso: 0.12, nucleo: true, comp: [
+      {archivo: eficacia_control_mensual, col: cumplimiento_art101_12m, mejor: 0.75, peor: 0.10, peso_intra: 1.0, modo: suavizado}]}
+  - {var: "Calidad Normativa", eje: Legislativo, peso: 0.10, nucleo: true, comp: [
+      {archivo: __derived__, col: leyes_por_sesion, mejor: 1.5, peor: 0.2, peso_intra: 0.6, modo: suavizado},
+      {archivo: sesiones_mensual, col: cumplimiento_sesiones, mejor: 0.95, peor: 0.40, peso_intra: 0.4, modo: suavizado}]}
+  - {var: "Costo del Legislativo", eje: Legislativo, peso: 0.03, nucleo: true, comp: [
+      {archivo: costo_legislativo_mensual, col: costo_legislativo, mejor: 0.003, peor: 0.012, peso_intra: 1.0, modo: suavizado}]}
+  - {var: "Desempeño de la Corte", eje: Judicial, peso: 0.15, nucleo: true, comp: [
+      {archivo: resolucion_csjn_mensual, col: tasa_resolucion, mejor: 0.95, peor: 0.30, peso_intra: 0.35, modo: suavizado},
+      {archivo: resolucion_csjn_mensual, col: mediana_dias, mejor: 120, peor: 730, peso_intra: 0.25, modo: suavizado},
+      {archivo: resolucion_csjn_mensual, col: originaria_dias, mejor: 365, peor: 1825, peso_intra: 0.20, modo: suavizado},
+      {archivo: resolucion_csjn_mensual, col: csjn_vacantes, mejor: 0, peor: 3, peso_intra: 0.20, modo: suavizado}]}
+  - {var: "Cobertura Judicial", eje: Judicial, peso: 0.10, nucleo: true, comp: [
+      {archivo: cobertura_judicial_mensual, col: tasa_titular, mejor: 0.90, peor: 0.55, peso_intra: 0.45, modo: suavizado},
+      {archivo: cobertura_judicial_mensual, col: tasa_sin_cobertura, mejor: 0.0, peor: 0.20, peso_intra: 0.25, modo: suavizado},
+      {archivo: cobertura_judicial_mensual, col: meses_sin_nombramiento, mejor: 6, peor: 24, peso_intra: 0.30, modo: sin_suavizar}]}
+  - {var: "Escrutinio Abierto", eje: Prensa, peso: 0.06, nucleo: false, comp: [
+      {archivo: escrutinio_mensual, col: escrutinio_12m, mejor: 0.85, peor: 0.30, peso_intra: 1.0, modo: suavizado}]}
+  - {var: "Pauta Publicitaria", eje: Prensa, peso: 0.05, nucleo: true, comp: [
+      {archivo: pauta_mensual, col: intensidad_pauta, mejor: 0.0, peor: 0.004, peso_intra: 1.0, modo: suavizado}]}
+  - {var: "Causas contra periodistas", eje: Prensa, peso: 0.04, nucleo: false, comp: [
+      {archivo: prensa_causas_mensual, col: causas_jud_12m, mejor: 0, peor: 20, peso_intra: 1.0, modo: suavizado}]}
+  - {var: "Medios estatales", eje: Prensa, peso: 0.04, nucleo: true, comp: [
+      {archivo: medios_oficiales_mensual, col: medios_share, mejor: 0.0, peor: 0.0015, peso_intra: 1.0, modo: suavizado}]}
+  - {var: "Acceso de la prensa", eje: Prensa, peso: 0.04, nucleo: false, comp: [
+      {archivo: acceso_prensa_mensual, col: acceso_estructural, mejor: 1.0, peor: 0.0, peso_intra: 0.5, modo: arrastre},
+      {archivo: acceso_prensa_mensual, col: restricciones_12m, mejor: 0, peor: 40, peso_intra: 0.5, modo: suavizado}]}
+  - {var: "Financiamiento al Tesoro", eje: Banco Central, peso: 0.06, nucleo: true, comp: [
+      {archivo: bcra_financiamiento_mensual, col: financiamiento, mejor: 0.02, peor: 0.40, peso_intra: 1.0, modo: suavizado}]}
+  - {var: "Letras intransferibles", eje: Banco Central, peso: 0.05, nucleo: true, comp: [
+      {archivo: bcra_letras_mensual, col: letras_share, mejor: 0.0, peor: 0.70, peso_intra: 1.0, modo: suavizado}]}
+  - {var: "Designación Pdte. BCRA", eje: Banco Central, peso: 0.04, nucleo: true, comp: [
+      {archivo: bcra_designacion_mensual, col: designacion_acuerdo, mejor: 1, peor: 0, peso_intra: 1.0, modo: sin_suavizar}]}
+  - {var: "Respeto Carta Orgánica", eje: Banco Central, peso: 0.05, nucleo: true, comp: [
+      {archivo: carta_organica_mensual, col: carta_organica_exceso, mejor: 0.0, peor: 0.5, peso_intra: 1.0, modo: suavizado}]}

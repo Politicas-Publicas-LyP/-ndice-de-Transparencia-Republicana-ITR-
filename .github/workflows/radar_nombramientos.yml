@@ -1,0 +1,34 @@
+name: Radar de Nombramientos Judiciales (BORA)
+
+on:
+  schedule:
+    # 12:30 UTC = 09:30 ART, de lunes a viernes (el BORA ya publicó la 1ra sección).
+    - cron: '30 12 * * 1-5'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # para commitear el CSV puente actualizado
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependencias
+        run: pip install -r "07_Radar_Nombramientos/requirements.txt"
+      - name: Correr radar
+        run: python "07_Radar_Nombramientos/radar_nombramientos.py"
+      - name: Persistir CSV puente (si cambió)
+        run: |
+          git config user.name  "radar-nombramientos[bot]"
+          git config user.email "radar-nombramientos@users.noreplace.github.com"
+          if [ -n "$(git status --porcelain output/nombramientos_jueces.csv)" ]; then
+            git add output/nombramientos_jueces.csv
+            git commit -m "Radar nombramientos: $(date -u +%Y-%m-%d)"
+            git push
+          else
+            echo "Sin cambios en el CSV puente."
+          fi

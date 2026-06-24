@@ -1,0 +1,12 @@
+# ITR — Contratos de datos (umbrales para validar.py).
+# La estructura de columnas se DERIVA de variables.yaml (fuente única de verdad);
+# acá viven solo los umbrales de validación.
+frescura_max_meses: 3        # antigüedad máx. tolerada del último dato antes de avisar
+frescura_overrides:          # variables estructurales/anuales: tolerancia mayor
+  resolucion_csjn_mensual: 14
+  cobertura_judicial_mensual: 14
+  atn_mensual: 14
+  medios_oficiales_mensual: 14
+  pauta_mensual: 14
+  costo_legislativo_mensual: 14
+  carta_organica_mensual: 3
