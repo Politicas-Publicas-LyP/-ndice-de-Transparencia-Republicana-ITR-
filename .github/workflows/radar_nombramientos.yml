@@ -4,7 +4,16 @@ on:
   schedule:
     # 12:30 UTC = 09:30 ART, de lunes a viernes (el BORA ya publicó la 1ra sección).
     - cron: '30 12 * * 1-5'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      desde:
+        description: 'Corrida histórica: fecha inicial YYYY-MM-DD (vacío = solo hoy)'
+        required: false
+        default: ''
+      hasta:
+        description: 'Corrida histórica: fecha final YYYY-MM-DD (vacío = hoy)'
+        required: false
+        default: ''
 
 permissions:
   contents: write   # para commitear el CSV puente actualizado
@@ -20,7 +29,15 @@ jobs:
       - name: Instalar dependencias
         run: pip install -r "07_Radar_Nombramientos/requirements.txt"
       - name: Correr radar
-        run: python "07_Radar_Nombramientos/radar_nombramientos.py"
+        env:
+          DESDE: ${{ github.event.inputs.desde }}
+          HASTA: ${{ github.event.inputs.hasta }}
+        run: |
+          ARGS=""
+          if [ -n "$DESDE" ]; then ARGS="--desde $DESDE"; fi
+          if [ -n "$HASTA" ]; then ARGS="$ARGS --hasta $HASTA"; fi
+          echo "Ejecutando: radar_nombramientos.py $ARGS"
+          python "07_Radar_Nombramientos/radar_nombramientos.py" $ARGS
       - name: Persistir CSV puente (si cambió)
         run: |
           git config user.name  "radar-nombramientos[bot]"

@@ -32,10 +32,19 @@ entre snapshots del dataset.
 
 ## Uso
 ```
-py 07_Radar_Nombramientos\radar_nombramientos.py          # escanea el BORA de hoy
-py 07_Radar_Nombramientos\radar_nombramientos.py --test   # prueba la detección (sin red)
+py 07_Radar_Nombramientos\radar_nombramientos.py                       # escanea el BORA de hoy
+py 07_Radar_Nombramientos\radar_nombramientos.py --test               # prueba la detección (sin red)
+py 07_Radar_Nombramientos\radar_nombramientos.py --desde 2026-06-01   # corrida histórica (hasta=hoy)
+py 07_Radar_Nombramientos\radar_nombramientos.py --desde 2026-06-01 --hasta 2026-06-23
 ```
 Requisitos: `pip install -r 07_Radar_Nombramientos/requirements.txt`
+
+### Modo histórico (corrida única de recuperación)
+El índice del BORA solo muestra la edición de HOY; para días pasados el radar lista las
+normas vía **Vigía** (`vigia-api.openarg.org`) y lee el texto de cada una en el BORA. Hace
+falta acceso a Vigía (IP del exterior / GitHub Actions; suele estar bloqueada desde redes
+argentinas — en ese caso correrlo en Actions). El append es idempotente (dedup por URL): se
+puede repetir sin duplicar. Variables opcionales: `VIGIA_API_BASE`, `VIGIA_API_TOKEN`.
 
 ## Automatización
 `.github/workflows/radar_nombramientos.yml`: corre L–V 09:30 ART, actualiza y commitea el

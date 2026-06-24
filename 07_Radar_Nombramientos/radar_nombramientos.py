@@ -26,7 +26,7 @@ Uso:
 Requisitos: pip install requests beautifulsoup4
 """
 from __future__ import annotations
-import argparse, csv, re, sys, time, unicodedata
+import argparse, csv, os, re, sys, time, unicodedata
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -42,6 +42,13 @@ OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output"
 CSV_PUENTE = OUTPUT_DIR / "nombramientos_jueces.csv"
 DELAY = 1.2
 MIN_CUERPO = 200
+
+# Vigía (openarg) — para LISTAR normas de días pasados (el índice del BORA solo muestra hoy).
+# Solo se usa en el modo histórico; el texto de cada norma se sigue leyendo del BORA.
+VIGIA_API_BASE = (os.environ.get("VIGIA_API_BASE") or "https://vigia-api.openarg.org").rstrip("/")
+VIGIA_API_TOKEN = os.environ.get("VIGIA_API_TOKEN", "")
+VIGIA_TIMEOUT = 25
+VIGIA_MAX_PAGINAS = 60  # 60 x 100 = 6000 normas; sobra para varias semanas
 
 # --- Detección de designaciones de JUECES TITULARES ---
 VERBO  = re.compile(r"\b(DESIGNA|DESIGNASE|DESIGNANSE|NOMBRA|NOMBRASE|DESIGNAR|DESIGNACION)\b")
@@ -152,6 +159,88 @@ def append_filas(filas):
             w.writerow(fila)
 
 
+def _vigia_get_json(path, params=None):
+    h = {"Accept": "application/json", "User-Agent": HEADERS["User-Agent"]}
+    if VIGIA_API_TOKEN:
+        h["Authorization"] = f"Bearer {VIGIA_API_TOKEN}"
+    r = requests.get(f"{VIGIA_API_BASE}{path}", headers=h, params=params, timeout=VIGIA_TIMEOUT)
+    if r.status_code != 200:
+        raise RuntimeError(f"HTTP {r.status_code}: {r.text[:160]}")
+    return r.json()
+
+
+def listar_vigia_rango(desde: str, hasta: str):
+    """Normas de la Primera Sección publicadas entre desde y hasta (YYYY-MM-DD), vía Vigía.
+    Devuelve lista de {titulo, url, fecha, resumen}. Vigía ordena de más nuevo a más viejo:
+    paginamos hasta cruzar 'desde'. Requiere acceso a vigia-api (IP del exterior/Actions)."""
+    normas, vistas = [], set()
+    for pagina in range(VIGIA_MAX_PAGINAS):
+        data = _vigia_get_json("/normas", params={"limit": 100, "offset": pagina * 100})
+        page = data.get("items", [])
+        if not page:
+            break
+        seguir = True
+        for it in page:
+            f = it.get("fecha_publicacion") or ""
+            if f and f < desde:
+                seguir = False  # ya pasamos el rango (orden descendente)
+                continue
+            if desde <= f <= hasta and it.get("bora_seccion") == "Primera Sección" \
+                    and it.get("url") and it["url"] not in vistas:
+                vistas.add(it["url"])
+                titulo = f"{it.get('organismo','')} {it.get('numero','')} {it.get('titulo','')}".strip()
+                normas.append({"titulo": titulo, "url": it["url"], "fecha": f,
+                               "resumen": it.get("resumen") or ""})
+        if not seguir:
+            break
+    return normas
+
+
+def _detectar_en(normas, fecha_por_norma=True):
+    """Lee el texto de las candidatas (por título/resumen), corre la detección y devuelve filas."""
+    hoy = (datetime.utcnow() - timedelta(hours=3)).strftime("%Y-%m-%d")
+    vistas = cargar_existentes()
+    cand = [n for n in normas if JUEZ.search(normalizar(f"{n['titulo']} {n.get('resumen','')}"))]
+    print(f"  {len(cand)} candidatas (mencionan juez/magistrado en título/resumen). Leyendo texto...")
+    filas = []
+    for n in cand:
+        if n["url"] in vistas:
+            continue
+        resumen, cuerpo = obtener_texto_norma(n["url"])
+        tn = normalizar(f"{n['titulo']} {n.get('resumen','')} {resumen} {cuerpo}")
+        det = detectar(tn)
+        if det:
+            conf, organo, motivo = det
+            tipo = "Decreto" if "DECRETO" in normalizar(n["titulo"]) else "Otro"
+            fpub = n.get("fecha") if fecha_por_norma and n.get("fecha") else hoy
+            filas.append({"fecha_deteccion": hoy, "fecha_publicacion": fpub, "tipo": tipo,
+                          "organo": organo, "confianza": conf, "motivo": motivo,
+                          "titulo": n["titulo"][:300], "url": n["url"]})
+        time.sleep(DELAY)
+    return filas
+
+
+def escanear_historico(desde: str, hasta: str):
+    """Corrida ÚNICA de recuperación: capta designaciones publicadas en [desde, hasta]."""
+    print(f"HISTÓRICO — BORA Primera Sección de {desde} a {hasta} (listado vía Vigía)")
+    try:
+        normas = listar_vigia_rango(desde, hasta)
+    except Exception as e:  # noqa: BLE001
+        print(f"FALLO: no se pudo listar el rango vía Vigía: {e}")
+        print("  (El listado por fecha exige Vigía; el índice del BORA solo muestra el día de hoy.)")
+        return 1
+    print(f"  {len(normas)} normas de la Primera Sección en el rango.")
+    filas = _detectar_en(normas, fecha_por_norma=True)
+    if filas:
+        append_filas(filas)
+        print(f"  ✅ {len(filas)} designación(es) de juez detectadas y agregadas a {CSV_PUENTE.name}:")
+        for d in sorted(filas, key=lambda x: x["fecha_publicacion"]):
+            print(f"     {d['fecha_publicacion']} [{d['confianza']}] {d['organo'] or d['titulo'][:60]}")
+    else:
+        print("  Sin designaciones judiciales en el rango.")
+    return 0
+
+
 def escanear():
     hoy = (datetime.utcnow() - timedelta(hours=3)).strftime("%Y-%m-%d")  # fecha AR
     print(f"BORA Primera Sección — {hoy}")
@@ -211,8 +300,15 @@ def test():
 def main():
     ap = argparse.ArgumentParser(description="ITR — Radar de nombramientos judiciales (BORA)")
     ap.add_argument("--test", action="store_true", help="prueba la detección con ejemplos, sin red")
+    ap.add_argument("--desde", help="corrida histórica: fecha inicial YYYY-MM-DD (lista vía Vigía)")
+    ap.add_argument("--hasta", help="corrida histórica: fecha final YYYY-MM-DD (def.: hoy)")
     args = ap.parse_args()
-    return test() if args.test else escanear()
+    if args.test:
+        return test()
+    if args.desde:
+        hasta = args.hasta or (datetime.utcnow() - timedelta(hours=3)).strftime("%Y-%m-%d")
+        return escanear_historico(args.desde, hasta)
+    return escanear()
 
 
 if __name__ == "__main__":
