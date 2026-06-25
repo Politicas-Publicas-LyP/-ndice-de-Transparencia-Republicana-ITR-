@@ -56,7 +56,8 @@ idempotente (dedup por URL): se puede repetir sin duplicar. Funciona desde IP ar
 desde GitHub Actions (el BORA responde en ambos).
 
 ## Automatización
-`.github/workflows/radar_nombramientos.yml`: corre L–V 09:30 ART, actualiza y commitea el
-CSV puente. El BORA es accesible desde IP del exterior (GitHub Actions). Principio rector,
+El workflow vive ÚNICAMENTE en la **raíz** del repo (`.github/workflows/radar_nombramientos.yml`);
+GitHub Actions solo ejecuta los que están ahí. No duplicar una copia dentro de esta carpeta.
+Corre L–V 09:30 ART, actualiza y commitea el CSV puente. El BORA es accesible desde IP del exterior (GitHub Actions). Principio rector,
 igual que el otro radar: **fallar avisando**, nunca decir "sin novedades" si no se pudo leer
 el Boletín.

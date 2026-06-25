@@ -54,6 +54,11 @@ RADAR_CSV = OUTPUT_DIR / "nombramientos_jueces.csv"
 #   https://raw.githubusercontent.com/USUARIO/REPO/main/output/nombramientos_jueces.csv
 # Se puede fijar acá o, mejor, por variable de entorno ITR_RADAR_CSV_URL (no toca el código).
 RADAR_CSV_URL = os.environ.get("ITR_RADAR_CSV_URL", "")
+# PADRÓN VIVO (padron_judicial.py): tasas de cobertura recalculadas en vivo con las altas/bajas
+# del BORA. Si existe, se usa para SOBREESCRIBIR el mes corriente (stock) con valor «estimado»,
+# de modo que la cobertura no quede congelada en el último snapshot oficial. Se reconcilia solo
+# cuando el dataset oficial publica un snapshot nuevo (que vuelve a ser la base del padrón).
+PADRON_TASAS = OUTPUT_DIR / "padron_tasas_estimadas.csv"
 HEADERS = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
@@ -216,6 +221,32 @@ def _combinar_fechas(a: pd.Series | None, b: pd.Series | None) -> pd.Series | No
     return pd.concat(partes).sort_values().reset_index(drop=True)
 
 
+def aplicar_padron_estimado(serie: pd.DataFrame) -> pd.DataFrame:
+    """Sobreescribe el ÚLTIMO mes (corriente) con las tasas del padrón vivo, marcándolo
+    `cobertura_estimada=1`. El STOCK (titular/subrogancia/sin-cobertura) deja de quedar
+    congelado en el snapshot oficial mientras el dataset no se actualice."""
+    serie = serie.copy()
+    serie["cobertura_estimada"] = 0
+    if not PADRON_TASAS.exists() or serie.empty:
+        return serie
+    try:
+        t = pd.read_csv(PADRON_TASAS).iloc[-1]
+    except Exception as e:  # noqa: BLE001
+        log.warning("No pude leer %s: %s", PADRON_TASAS.name, e)
+        return serie
+    if not str(t.get("etiqueta", "")).lower().startswith("estimado"):
+        log.info("Padrón presente pero no es 'estimado' (es base oficial); no se sobreescribe.")
+        return serie
+    idx = serie.index[-1]
+    for col in ["tasa_titular", "tasa_subrogancia", "tasa_sin_cobertura"]:
+        if col in t and pd.notna(t[col]):
+            serie.at[idx, col] = round(float(t[col]), 4)
+    serie.at[idx, "cobertura_estimada"] = 1
+    log.info("Cobertura ESTIMADA aplicada a %s desde el padrón vivo (titular=%.4f, subrog=%.4f).",
+             serie.at[idx, "periodo"], serie.at[idx, "tasa_titular"], serie.at[idx, "tasa_subrogancia"])
+    return serie
+
+
 def snapshots(s: requests.Session):
     resp = s.get(API, timeout=60)
     resp.raise_for_status()
@@ -370,6 +401,8 @@ def main() -> int:
     fechas_nom = _combinar_fechas(fechas_nom, fechas_radar())
 
     serie = to_monthly(snap, fechas_nom, args.desde, args.hasta)
+    # STOCK estimado del mes corriente desde el padrón vivo (si está disponible).
+    serie = aplicar_padron_estimado(serie)
     mx = serie["stale_meses"].dropna().max()
     if mx and mx > 12:
         log.warning("FRESCURA: el último snapshot tiene >12 meses (estructural desactualizada).")

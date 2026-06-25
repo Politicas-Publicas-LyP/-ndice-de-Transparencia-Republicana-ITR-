@@ -1,0 +1,34 @@
+# ── ITR — archivos que NO van al repositorio ────────────────────────────────
+# Regla: el repo guarda CÓDIGO, configuración, documentos y los CSV "publicados"
+# (las series *_mensual.csv, el índice itr_*.csv, el puente nombramientos_jueces.csv
+# y el padrón). NO guarda artefactos regenerables ni archivos de máquina.
+
+# Artefactos de Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.ipynb_checkpoints/
+
+# Locks y temporales de editores / sistema operativo
+.~lock.*#
+*.tmp
+*~
+.DS_Store
+Thumbs.db
+
+# Cachés y dumps intermedios de los scrapers (se regeneran al correr)
+output/_cache_*
+output/_recaudacion.csv
+output/_balbcrhis.xls
+output/_rad-*.jpg
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Credenciales (nunca subir)
+*.env
+*credentials*.json
+radar-bora-*.json

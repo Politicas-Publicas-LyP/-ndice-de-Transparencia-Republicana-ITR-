@@ -4,6 +4,21 @@
 de calidad republicana (0-100), con dato duro, **determinístico y auditable** (sin IA en el
 valor publicado). Este documento es la referencia para operar y mantener el proyecto.
 
+## Repositorio y régimen de trabajo (LEER PRIMERO)
+
+- **Fuente única de verdad (remoto):** https://github.com/Politicas-Publicas-LyP/-ndice-de-Transparencia-Republicana-ITR-
+  Siempre extraer la última versión de ahí antes de trabajar y subir los cambios al terminar.
+- **Trabajo en paralelo:** el índice se desarrolla con varias cuentas/máquinas a la vez. La
+  sincronización se hace con **GitHub Desktop** (pull antes de empezar, commit + push al cerrar).
+  El repo debe quedar siempre actualizado; ante la duda, `pull` primero para no pisar trabajo ajeno.
+- **Estado por variable:** cada carpeta de eje tiene un `BITACORA.md` con el estado, la fuente, la
+  última actualización y los pendientes de cada variable. Es el lugar para leer/registrar novedades
+  sin tener que abrir el código. Mantenerlo al día con cada cambio.
+- **Qué versiona el repo:** código, configuración (`variables.yaml`, `contracts.yaml`), documentos,
+  bitácoras y los CSV publicados (`output/*_mensual.csv`, `itr_*.csv`, el puente
+  `nombramientos_jueces.csv` y el padrón). Lo regenerable (cachés `output/_cache_*`, `__pycache__`,
+  locks) está excluido por `.gitignore`.
+
 ## Arquitectura de carpetas
 - `00_Comun/` — ensamblador (`icia_ensamblado.py`), gráficos (`graficar_itr.py`), validador
   (`validar.py`), **`variables.yaml`** (fuente única de verdad), `contracts.yaml`, `requirements.txt`.
