@@ -30,21 +30,30 @@ El scraper de Cobertura Judicial (`03_Poder_Judicial/scraper_05_cobertura_judici
 lee ese CSV y toma `max(fecha dataset, fecha radar)` para el flujo, manteniéndolo fresco
 entre snapshots del dataset.
 
+## Cómo lee el BORA (importante)
+La Primera Sección se obtiene **por fecha exacta**: `/seccion/primera/AAAAMMDD` (render del
+servidor, sin JS). El título del enlace de cada norma es del tipo
+`JUSTICIA Decreto 545/2026 DECTO-2026-545-APN-PTE - Nombramiento.` — **no** dice "juez". El
+asunto real (`Nómbrase JUEZ DEL JUZGADO…`, `acuerdo prestado por el H. SENADO…`) está en el
+**cuerpo** de la ficha. Por eso el radar toma como candidata toda norma de Justicia /
+Nombramiento y **decide leyendo el cuerpo**, nunca el título. (Filtrar por "juez" en el título
+fue justamente el bug que hacía que no detectara nada.)
+
 ## Uso
 ```
 py 07_Radar_Nombramientos\radar_nombramientos.py                       # escanea el BORA de hoy
-py 07_Radar_Nombramientos\radar_nombramientos.py --test               # prueba la detección (sin red)
-py 07_Radar_Nombramientos\radar_nombramientos.py --desde 2026-06-01   # corrida histórica (hasta=hoy)
-py 07_Radar_Nombramientos\radar_nombramientos.py --desde 2026-06-01 --hasta 2026-06-23
+py 07_Radar_Nombramientos\radar_nombramientos.py --fecha 2026-06-25    # una fecha puntual
+py 07_Radar_Nombramientos\radar_nombramientos.py --desde 2026-06-01    # histórico (hasta=hoy)
+py 07_Radar_Nombramientos\radar_nombramientos.py --desde 2026-06-01 --hasta 2026-06-25
+py 07_Radar_Nombramientos\radar_nombramientos.py --test                # prueba la detección (sin red)
 ```
 Requisitos: `pip install -r 07_Radar_Nombramientos/requirements.txt`
 
 ### Modo histórico (corrida única de recuperación)
-El índice del BORA solo muestra la edición de HOY; para días pasados el radar lista las
-normas vía **Vigía** (`vigia-api.openarg.org`) y lee el texto de cada una en el BORA. Hace
-falta acceso a Vigía (IP del exterior / GitHub Actions; suele estar bloqueada desde redes
-argentinas — en ese caso correrlo en Actions). El append es idempotente (dedup por URL): se
-puede repetir sin duplicar. Variables opcionales: `VIGIA_API_BASE`, `VIGIA_API_TOKEN`.
+Lee el BORA **directo por fecha** (sin Vigía): itera día por día de `--desde` a `--hasta`,
+salta fines de semana, y para cada edición filtra candidatas y lee el cuerpo. El append es
+idempotente (dedup por URL): se puede repetir sin duplicar. Funciona desde IP argentina y
+desde GitHub Actions (el BORA responde en ambos).
 
 ## Automatización
 `.github/workflows/radar_nombramientos.yml`: corre L–V 09:30 ART, actualiza y commitea el
