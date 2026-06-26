@@ -34,7 +34,7 @@ Requisitos: pip install requests beautifulsoup4
 """
 from __future__ import annotations
 import argparse, csv, re, sys, time, unicodedata
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from pathlib import Path
 
 import requests
@@ -46,7 +46,8 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
                          "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
            "Accept-Language": "es-AR,es;q=0.9"}
 OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output"
-CSV_PUENTE = OUTPUT_DIR / "nombramientos_jueces.csv"
+CSV_PUENTE = OUTPUT_DIR / "nombramientos_jueces.csv"   # ALTAS (designaciones)
+CSV_BAJAS = OUTPUT_DIR / "bajas_jueces.csv"            # BAJAS (renuncias/ceses/etc.)
 DELAY = 1.0          # pausa entre lecturas de fichas
 DELAY_DIA = 0.4      # pausa entre días en el modo histórico
 
@@ -56,8 +57,13 @@ JUEZ   = re.compile(r"\b(JUEZ|JUEZA|JUECES|MAGISTRAD\w*|CAMARISTA|VOCAL DE LA CA
 ORGANO = re.compile(r"(JUZGADO[^,.;]{0,90}|CAMARA (?:FEDERAL|NACIONAL)[^,.;]{0,90}|TRIBUNAL ORAL[^,.;]{0,90})")
 SENADO = re.compile(r"\b(SENADO|ACUERDO PRESTADO|ACUERDO DEL? (?:HONORABLE )?SENADO)\b")
 SUBROGA = re.compile(r"\bSUBROGA\w*")
+# --- Detección de BAJAS de jueces (liberan el cargo): renuncia / cese / remoción /
+#     jubilación / límite de edad / fallecimiento. ---
+BAJA = re.compile(r"\b(ACEPTASE\s+LA\s+RENUNCIA|RENUNCIA|CESE|CESA\w*|REMOCION|REMUEV\w*|"
+                  r"JUBILA\w*|LIMITE DE EDAD|FALLEC\w*|DECESO)\b")
 # Pre-filtro de candidatas por TÍTULO del enlace (el cuerpo decide después).
-CAND = re.compile(r"NOMBRAMIENTO|DESIGNA|\bJUEZ|\bJUEZA|MAGISTRAD|PODER JUDICIAL")
+CAND = re.compile(r"NOMBRAMIENTO|DESIGNA|RENUNCIA|CESE|CESA|REMOCION|JUBILA|FALLEC|"
+                  r"\bJUEZ|\bJUEZA|MAGISTRAD|PODER JUDICIAL")
 
 
 def normalizar(t: str) -> str:
@@ -162,18 +168,36 @@ def detectar(texto_norm: str):
     return conf, organo, motivo
 
 
+def detectar_baja(texto_norm: str):
+    """(confianza, organo, motivo) si parece BAJA de un juez (renuncia/cese/remoción/
+    jubilación/límite de edad/fallecimiento); si no, None. Libera el cargo en el padrón."""
+    tiene_juez = bool(JUEZ.search(texto_norm))
+    m = BAJA.search(texto_norm)
+    if not (tiene_juez and m):
+        return None
+    es_decreto = "DECRETO" in texto_norm
+    conf = "ALTA" if es_decreto else "MEDIA"
+    mo = ORGANO.search(texto_norm)
+    organo = mo.group(0).strip()[:90] if mo else ""
+    causa = m.group(1).lower().replace("aceptase la renuncia", "renuncia")
+    motivo = "+".join([s for s, ok in [("decreto", es_decreto), ("juez", tiene_juez)] if ok]) + f"+{causa}"
+    return conf, organo, motivo
+
+
 def cargar_existentes():
-    if not CSV_PUENTE.exists():
-        return set()
-    with CSV_PUENTE.open(encoding="utf-8") as f:
-        return {row["url"].split("?")[0] for row in csv.DictReader(f)}
+    urls = set()
+    for path in (CSV_PUENTE, CSV_BAJAS):
+        if path.exists():
+            with path.open(encoding="utf-8") as f:
+                urls |= {row["url"].split("?")[0] for row in csv.DictReader(f)}
+    return urls
 
 
-def append_filas(filas):
-    nuevo = not CSV_PUENTE.exists()
+def append_filas(filas, path: Path):
+    nuevo = not path.exists()
     OUTPUT_DIR.mkdir(exist_ok=True)
     cols = ["fecha_deteccion", "fecha_publicacion", "tipo", "organo", "confianza", "motivo", "titulo", "url"]
-    with CSV_PUENTE.open("a", newline="", encoding="utf-8") as f:
+    with path.open("a", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         if nuevo:
             w.writeheader()
@@ -182,32 +206,40 @@ def append_filas(filas):
 
 
 def procesar(normas, hoy, fecha_filtrar: str | None = None):
-    """Lee el cuerpo de las candidatas, corre la detección y devuelve filas nuevas."""
+    """Lee el cuerpo de las candidatas y devuelve (altas, bajas) nuevas. Para cada norma,
+    primero se prueba ALTA (designación); si no, BAJA (renuncia/cese/etc.)."""
     vistas = cargar_existentes()
     cand = [n for n in normas if es_candidata(normalizar(n["titulo"]))]
     if fecha_filtrar:
         cand = [n for n in cand if (n.get("fecha") or fecha_filtrar) == fecha_filtrar]
-    filas = []
+    altas, bajas = [], []
     for n in cand:
         if n["url"] in vistas:
             continue
         cuerpo = obtener_texto_norma(n["url"])
         tn = normalizar(f"{n['titulo']} {cuerpo}")
+        tipo = "Decreto" if "DECRETO" in normalizar(n["titulo"]) else "Otro"
+        fpub = n.get("fecha") or fecha_filtrar or hoy
         det = detectar(tn)
         if det:
             conf, organo, motivo = det
-            tipo = "Decreto" if "DECRETO" in normalizar(n["titulo"]) else "Otro"
-            fpub = n.get("fecha") or fecha_filtrar or hoy
-            filas.append({"fecha_deteccion": hoy, "fecha_publicacion": fpub, "tipo": tipo,
+            altas.append({"fecha_deteccion": hoy, "fecha_publicacion": fpub, "tipo": tipo,
                           "organo": organo, "confianza": conf, "motivo": motivo,
                           "titulo": n["titulo"][:300], "url": n["url"]})
+        else:
+            db = detectar_baja(tn)
+            if db:
+                conf, organo, motivo = db
+                bajas.append({"fecha_deteccion": hoy, "fecha_publicacion": fpub, "tipo": tipo,
+                              "organo": organo, "confianza": conf, "motivo": motivo,
+                              "titulo": n["titulo"][:300], "url": n["url"]})
         vistas.add(n["url"])
         time.sleep(DELAY)
-    return filas
+    return altas, bajas
 
 
 def _hoy_ar():
-    return (datetime.utcnow() - timedelta(hours=3))
+    return datetime.now(timezone.utc) - timedelta(hours=3)
 
 
 def escanear(fecha: str | None = None):
@@ -222,8 +254,8 @@ def escanear(fecha: str | None = None):
     print(f"  {len(normas)} normas en la edición.")
     if len(normas) == 0:
         print("  Aviso: 0 normas — puede que la edición de hoy aún no esté publicada."); return 0
-    filas = procesar(normas, hoy, fecha_filtrar=iso)
-    _reportar(filas)
+    altas, bajas = procesar(normas, hoy, fecha_filtrar=iso)
+    _reportar(altas, bajas)
     return 0
 
 
@@ -234,7 +266,7 @@ def escanear_historico(desde: str, hasta: str):
     d1 = datetime.strptime(hasta, "%Y-%m-%d").date()
     hoy = _hoy_ar().strftime("%Y-%m-%d")
     print(f"HISTÓRICO — BORA Primera Sección de {desde} a {hasta} (lectura directa por fecha)")
-    todas = []
+    todas_a, todas_b = [], []
     d = d0
     while d <= d1:
         iso = d.strftime("%Y-%m-%d"); compact = d.strftime("%Y%m%d")
@@ -243,24 +275,31 @@ def escanear_historico(desde: str, hasta: str):
         normas, ok = obtener_lista_bora(compact)
         if not ok:
             print(f"  {iso}: no se pudo leer (se omite, revisar manual)."); d += timedelta(days=1); continue
-        filas = procesar(normas, hoy, fecha_filtrar=iso)
-        if filas:
-            print(f"  {iso}: {len(filas)} designación(es).")
-            todas.extend(filas)
+        a, b = procesar(normas, hoy, fecha_filtrar=iso)
+        if a or b:
+            print(f"  {iso}: {len(a)} alta(s), {len(b)} baja(s).")
+            todas_a.extend(a); todas_b.extend(b)
         time.sleep(DELAY_DIA)
         d += timedelta(days=1)
-    _reportar(todas)
+    _reportar(todas_a, todas_b)
     return 0
 
 
-def _reportar(filas):
-    if not filas:
-        print("  Sin designaciones judiciales nuevas."); return
-    append_filas(filas)
-    n_alta = sum(1 for f in filas if f["confianza"] == "ALTA")
-    print(f"  ✅ {len(filas)} designación(es) agregadas a {CSV_PUENTE.name} ({n_alta} ALTA):")
-    for d in sorted(filas, key=lambda x: (x["fecha_publicacion"], x["confianza"])):
-        print(f"     {d['fecha_publicacion']} [{d['confianza']}] {d['organo'] or d['titulo'][:70]}")
+def _reportar(altas, bajas):
+    if not altas and not bajas:
+        print("  Sin novedades judiciales (altas/bajas)."); return
+    if altas:
+        append_filas(altas, CSV_PUENTE)
+        na = sum(1 for f in altas if f["confianza"] == "ALTA")
+        print(f"  ✅ {len(altas)} designación(es) → {CSV_PUENTE.name} ({na} ALTA):")
+        for d in sorted(altas, key=lambda x: (x["fecha_publicacion"], x["confianza"])):
+            print(f"     {d['fecha_publicacion']} [{d['confianza']}] {d['organo'] or d['titulo'][:70]}")
+    if bajas:
+        append_filas(bajas, CSV_BAJAS)
+        nb = sum(1 for f in bajas if f["confianza"] == "ALTA")
+        print(f"  ⛔ {len(bajas)} baja(s) → {CSV_BAJAS.name} ({nb} ALTA):")
+        for d in sorted(bajas, key=lambda x: (x["fecha_publicacion"], x["confianza"])):
+            print(f"     {d['fecha_publicacion']} [{d['confianza']}] {d['organo'] or d['titulo'][:70]} ({d['motivo']})")
 
 
 def test():
@@ -269,26 +308,35 @@ def test():
                    "DECRETA: Nombrase JUEZ DEL JUZGADO NACIONAL DE PRIMERA INSTANCIA EN LO CIVIL "
                    "N 25 DE LA CAPITAL FEDERAL al doctor Santos Enrique CIFUENTES. MILEI")
     casos = [
-        ("JUSTICIA Decreto 545/2026 DECTO-2026-545-APN-PTE - Nombramiento.", cuerpo_real, "ALTA", True),
+        ("JUSTICIA Decreto 545/2026 DECTO-2026-545-APN-PTE - Nombramiento.", cuerpo_real, "alta", "ALTA", True),
         ("JUSTICIA Decreto 200/2026 - Nombramiento.",
-         "Nombrase JUEZA de la CAMARA FEDERAL DE APELACIONES DE CORDOBA, en acuerdo prestado por el Senado.", "ALTA", True),
+         "Nombrase JUEZA de la CAMARA FEDERAL DE APELACIONES DE CORDOBA, en acuerdo prestado por el Senado.", "alta", "ALTA", True),
         ("MINISTERIO PUBLICO Decreto 525/2026 - Nombramiento.",
-         "Nombrase DEFENSOR PUBLICO OFICIAL ante los tribunales federales de Salta.", None, True),
-        ("MINISTERIO DE SALUD Resolución 699/2026", "Apruebase el listado de medicamentos.", None, False),
+         "Nombrase DEFENSOR PUBLICO OFICIAL ante los tribunales federales de Salta.", None, None, True),
+        ("MINISTERIO DE SALUD Resolución 699/2026", "Apruebase el listado de medicamentos.", None, None, False),
         ("JUSTICIA Resolución 50/2026 - Subrogancia",
-         "Designase subrogante en el Juzgado Federal de Tartagal al doctor Perez.", None, False),
+         "Designase subrogante en el Juzgado Federal de Tartagal al doctor Perez.", None, None, False),
         ("JUSTICIA Decreto 542/2026 - Nombramientos.",
-         "Nombranse JUECES de los TRIBUNALES ORALES EN LO CRIMINAL FEDERAL, con acuerdo del Senado.", "ALTA", True),
+         "Nombranse JUECES de los TRIBUNALES ORALES EN LO CRIMINAL FEDERAL, con acuerdo del Senado.", "alta", "ALTA", True),
+        ("JUSTICIA Decreto 530/2025 DECTO-2025-530-APN-PTE - Acéptase renuncia.",
+         "Acéptase la renuncia presentada por la doctora Graciela Beatriz PEREIRA al cargo de JUEZA DEL JUZGADO FEDERAL N 2 DE SALTA.", "baja", "ALTA", True),
+        ("JUSTICIA Decreto 99/2025 - Remoción.",
+         "Remuévese al doctor X del cargo de JUEZ del Juzgado Federal de Tartagal.", "baja", "ALTA", True),
     ]
-    print("=== TEST de detección (título + cuerpo) ===")
+    print("=== TEST de detección (altas y bajas) ===")
     ok = 0
-    for titulo, cuerpo, esperado, esp_cand in casos:
+    for titulo, cuerpo, esp_kind, esp_conf, esp_cand in casos:
         cand = es_candidata(normalizar(titulo))
-        det = detectar(normalizar(f"{titulo} {cuerpo}"))
-        got = det[0] if det else None
-        bien = (got == esperado) and (cand == esp_cand)
+        tn = normalizar(f"{titulo} {cuerpo}")
+        da = detectar(tn)
+        if da:
+            kind, conf = "alta", da[0]
+        else:
+            db = detectar_baja(tn)
+            kind, conf = ("baja", db[0]) if db else (None, None)
+        bien = (kind == esp_kind) and (conf == esp_conf) and (cand == esp_cand)
         ok += bien
-        print(f"  [{'OK' if bien else '✗'}] cand={cand!s:5} det={got!s:5} (esp {esperado!s:5}) | {titulo[:55]}")
+        print(f"  [{'OK' if bien else '✗'}] cand={cand!s:5} {kind!s:5}/{conf!s:5} (esp {esp_kind!s:5}/{esp_conf!s:5}) | {titulo[:50]}")
     print(f"{ok}/{len(casos)} casos correctos.")
     return 0 if ok == len(casos) else 1
 

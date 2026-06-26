@@ -49,7 +49,8 @@ REVISION = OUTPUT_DIR / "padron_revision.csv"          # eventos sin cargo asign
 TASAS_EST = OUTPUT_DIR / "padron_tasas_estimadas.csv"  # tasas recalculadas
 RADAR_ALTAS = OUTPUT_DIR / "nombramientos_jueces.csv"  # salida del radar (designaciones)
 RADAR_ALTAS_URL = os.environ.get("ITR_RADAR_CSV_URL", "")  # mismo puente que la cobertura
-RADAR_BAJAS = OUTPUT_DIR / "bajas_jueces.csv"          # salida del detector de bajas (a futuro)
+RADAR_BAJAS = OUTPUT_DIR / "bajas_jueces.csv"          # salida del detector de bajas (radar)
+RADAR_BAJAS_URL = RADAR_ALTAS_URL.replace("nombramientos_jueces", "bajas_jueces") if RADAR_ALTAS_URL else ""
 HEADERS = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                           "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
            "Accept": "application/json,*/*"}
@@ -348,10 +349,21 @@ def actualizar() -> int:
     pad["_num"] = pad["organo_nombre"].map(numero)
 
     altas = _cargar_eventos(RADAR_ALTAS, "alta", url=RADAR_ALTAS_URL)
-    bajas = _cargar_eventos(RADAR_BAJAS, "baja")
+    bajas = _cargar_eventos(RADAR_BAJAS, "baja", url=RADAR_BAJAS_URL)
     eventos = pd.concat([x for x in [altas, bajas] if len(x)], ignore_index=True) \
         if (len(altas) or len(bajas)) else pd.DataFrame()
-    log.info("Eventos a aplicar: %s altas, %s bajas", len(altas), len(bajas))
+
+    # Solo eventos POSTERIORES al snapshot oficial: los anteriores ya están en el dato duro,
+    # aplicarlos sería contar dos veces. El padrón es un overlay desde la fecha del snapshot.
+    snap_fecha = pad["snapshot_fecha"].iloc[0] if len(pad) and "snapshot_fecha" in pad else ""
+    if len(eventos) and snap_fecha:
+        fp = pd.to_datetime(eventos.get("fecha_publicacion"), errors="coerce")
+        corte = pd.to_datetime(snap_fecha, errors="coerce")
+        previos = int((fp <= corte).sum())
+        eventos = eventos[fp > corte]
+        if previos:
+            log.info("%s evento(s) <= snapshot (%s) ignorados: ya están en el dato oficial.", previos, snap_fecha)
+    log.info("Eventos a aplicar (posteriores al snapshot): %s", len(eventos))
 
     revision, aplicados = [], 0
     for _, ev in eventos.iterrows():

@@ -15,10 +15,10 @@ Eje 20%. Cobertura = independencia (titularidad) + funcional (vacantes sin cubri
 - **Pendientes:** Reconciliar al salir snapshot oficial nuevo.
 
 ## Padrón judicial vivo  (`padron_judicial.py`)
-- **Estado:** NUEVO y OK. --construir (base oficial, reconcilia exacto) y --actualizar (aplica altas del radar; 46 designaciones de jun-2026 mapeadas, 0 a revisión).
-- **Fuente:** datos.jus + nombramientos_jueces.csv
+- **Estado:** NUEVO y OK. --construir (base oficial, reconcilia exacto) y --actualizar (aplica ALTAS del radar — 46 designaciones de jun-2026, 0 a revisión — y BAJAS de `bajas_jueces.csv`, que liberan el cargo a Vacante).
+- **Fuente:** datos.jus + nombramientos_jueces.csv + bajas_jueces.csv (puente del repo)
 - **Última actualización:** 2026-06-25
-- **Pendientes:** Detector de BAJAS (renuncias/ceses → bajas_jueces.csv); luego enchufarlo.
+- **Pendientes:** —
 
 ## Desempeño de la Corte (CSJN)  (`scraper_06_resolucion_csjn.py`)
 - **Estado:** OK.
@@ -36,3 +36,4 @@ Eje 20%. Cobertura = independencia (titularidad) + funcional (vacantes sin cubri
 - 2026-06-25 — Padrón judicial vivo creado y calibrado (matching por tokens+número; sinónimo CABA; parser del cuerpo del BORA).
 - 2026-06-25 — Cobertura: override de STOCK estimado del mes corriente.
 - 2026-06-25 — Verificado que las renuncias/ceses de jueces existen en el BORA (decretos 529/2025, 530/2025, etc.).
+- 2026-06-25 — Detector de BAJAS integrado al radar; el padrón ahora aplica altas y bajas (ciclo completo).

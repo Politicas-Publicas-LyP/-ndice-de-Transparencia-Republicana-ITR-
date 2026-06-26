@@ -1,4 +1,4 @@
-name: Radar de Nombramientos Judiciales (BORA)
+name: Radares BORA (jueces + Presidencia BCRA)
 
 on:
   schedule:
@@ -38,14 +38,24 @@ jobs:
           if [ -n "$HASTA" ]; then ARGS="$ARGS --hasta $HASTA"; fi
           echo "Ejecutando: radar_nombramientos.py $ARGS"
           python "07_Radar_Nombramientos/radar_nombramientos.py" $ARGS
+      - name: Correr radar Presidencia BCRA (alerta)
+        env:
+          DESDE: ${{ github.event.inputs.desde }}
+          HASTA: ${{ github.event.inputs.hasta }}
+        run: |
+          ARGS=""
+          if [ -n "$DESDE" ]; then ARGS="--desde $DESDE"; fi
+          if [ -n "$HASTA" ]; then ARGS="$ARGS --hasta $HASTA"; fi
+          echo "Ejecutando: radar_bcra.py $ARGS"
+          python "05_Banco_Central/radar_bcra.py" $ARGS
       - name: Persistir CSV puente (si cambió)
         run: |
-          git config user.name  "radar-nombramientos[bot]"
-          git config user.email "radar-nombramientos@users.noreplace.github.com"
-          if [ -n "$(git status --porcelain output/nombramientos_jueces.csv)" ]; then
-            git add output/nombramientos_jueces.csv
-            git commit -m "Radar nombramientos: $(date -u +%Y-%m-%d)"
+          git config user.name  "radares-bora[bot]"
+          git config user.email "radares-bora@users.noreplace.github.com"
+          git add output/nombramientos_jueces.csv output/bajas_jueces.csv output/bcra_presidencia_eventos.csv 2>/dev/null || true
+          if [ -n "$(git status --porcelain output/nombramientos_jueces.csv output/bajas_jueces.csv output/bcra_presidencia_eventos.csv)" ]; then
+            git commit -m "Radares BORA: $(date -u +%Y-%m-%d)"
             git push
           else
-            echo "Sin cambios en el CSV puente."
+            echo "Sin cambios en los CSV puente."
           fi

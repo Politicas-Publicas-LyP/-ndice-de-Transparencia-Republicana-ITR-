@@ -9,9 +9,9 @@ _Última revisión: 2026-06-25_
 Motor del índice y configuración transversal.
 
 ## Ensamblador  (`icia_ensamblado.py`)
-- **Estado:** OK. Lee variables.yaml; anclaje al ideal, suavizado 12m, arrastre y carryover; renormaliza por categoría sobre variables disponibles.
+- **Estado:** OK. Lee variables.yaml; anclaje al ideal, suavizado 12m, arrastre y carryover; renormaliza por categoría sobre variables disponibles. Los ESTADOS (`sin_suavizar`) persisten por ffill: no se caen de la renormalización en meses sin fila nueva.
 - **Fuente:** output/*_mensual.csv
-- **Última actualización:** 2026-06-25
+- **Última actualización:** 2026-06-26
 - **Pendientes:** —
 
 ## Fuente única de variables  (`variables.yaml`)
@@ -33,5 +33,7 @@ Motor del índice y configuración transversal.
 - **Pendientes:** —
 
 ## Registro de cambios
+- 2026-06-26 — Estados (`sin_suavizar`) ahora persisten por ffill: corrige la inflación de ejes
+  en meses parciales cuando un estado no tiene fila nueva (Designación Pdte. BCRA, presupuesto aprobado).
 - 2026-06-25 — Override de cobertura ESTIMADA del mes corriente desde el padrón vivo (vía scraper_05).
 - 2026-06-25 — Bitácora creada.

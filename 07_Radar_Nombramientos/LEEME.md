@@ -1,10 +1,13 @@
 # ITR — Radar de Nombramientos Judiciales (BORA)
 
 Radar **independiente** del Radar de Desregulación. Cada día hábil revisa la Primera
-Sección del Boletín Oficial y detecta los **decretos de designación de jueces titulares**
-(nombramiento del Poder Ejecutivo con acuerdo del Senado). Le da **cadencia** al flujo de
-nombramientos del eje Judicial del ITR, que de otro modo depende del dataset de
-magistrados (que se actualiza ~cada 2 años).
+Sección del Boletín Oficial y detecta, en una sola pasada, dos tipos de eventos de jueces:
+- **ALTAS** — decretos de designación de jueces titulares (PEN + acuerdo del Senado) → `output/nombramientos_jueces.csv`.
+- **BAJAS** — renuncia / cese / remoción / jubilación / límite de edad / fallecimiento de un juez → `output/bajas_jueces.csv`.
+
+Le da **cadencia** al eje Judicial del ITR (flujo de nombramientos y liberación de cargos),
+que de otro modo depende del dataset de magistrados (que se actualiza ~cada 2 años). El padrón
+judicial vivo lee ambos puentes: las altas marcan Titular y las bajas marcan Vacante.
 
 ## Por qué un radar aparte
 El Radar de Desregulación justamente **descarta** las normas de personal (designaciones).

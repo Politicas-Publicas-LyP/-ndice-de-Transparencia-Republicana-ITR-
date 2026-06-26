@@ -178,6 +178,12 @@ def main() -> int:
             if raw is None or raw.dropna().empty:
                 faltantes.append(f"{v['var']} [{col}]")
                 continue
+            # Los ESTADOS (sin_suavizar, no arrastre) persisten hasta que cambian: ffill para
+            # que no desaparezcan en meses sin fila nueva. Si no, se caen de la renormalización
+            # del eje e inflan/distorsionan el valor en análisis parciales del mes en curso
+            # (p. ej. "Designación Pdte. BCRA" o "presupuesto aprobado").
+            if col in NO_SUAVIZAR and col not in CARRYOVER:
+                raw = raw.ffill()
             base = carryover(raw, CARRY_MESES) if col in CARRYOVER else raw
             comp_scores.append(anchor(base, vb, vw, args.suavizado,
                                       col not in NO_SUAVIZAR and col not in CARRYOVER) * w)
