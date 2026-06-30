@@ -52,7 +52,8 @@ def graficar(csv, itr_col="ITR", salida=None, titulo="Índice de Transparencia R
     ax.set_title(titulo, fontsize=13, fontweight="bold", color="#C8102E")
     ax.grid(True, axis="y", linestyle=":", alpha=0.5)
     ax.legend(ncol=3, fontsize=8.5, loc="lower center", framealpha=0.9)
-    ax.spines[["top", "right"]].set_visible(False)
+    for _sp in ("top", "right"):   # compatible con cualquier versión de matplotlib
+        ax.spines[_sp].set_visible(False)
     fig.tight_layout()
     out = salida or str(OUTPUT_DIR / "itr_grafico.png")
     fig.savefig(out, dpi=160)

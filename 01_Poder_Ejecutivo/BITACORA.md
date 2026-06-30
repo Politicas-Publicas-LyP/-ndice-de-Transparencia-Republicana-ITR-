@@ -27,9 +27,14 @@ Eje 30%.
 - **Pendientes:** —
 
 ## ATN (federalismo)  (`scraper_16_atn.py`)
-- **Estado:** OK. Usa caché output/_cache_atn_*.
-- **Fuente:** Mecon / Transferencias a Provincias
-- **Última actualización:** 2026-06-25
+- **Estado:** OK. El índice usa el **share MENSUAL** (`atn_share_mensual`, crédito mensual DGSIAF),
+  no el anual: refleja la discrecionalidad mes a mes. Columnas extra: `atn_share` (anual, referencia)
+  y `atn_var_mom_pp` (variación vs mes anterior). **Inmutabilidad de publicación**: los meses
+  cerrados quedan fijos en `output/atn_obs_mensual.csv` (versionado) y no se recalculan en corridas
+  futuras. **Fallback** al share anual donde no hay mensual (años viejos) → no rompe el núcleo.
+  Caché solo de años CERRADOS (el año en curso se recalcula).
+- **Fuente:** DGSIAF crédito mensual y anual
+- **Última actualización:** 2026-06-29
 - **Pendientes:** ATN histórico para llegar a Macri (parqueado).
 
 ## Registro de cambios

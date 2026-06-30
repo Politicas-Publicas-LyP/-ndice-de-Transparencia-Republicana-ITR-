@@ -166,6 +166,11 @@ def main() -> int:
     ap.add_argument("--desde", default="2023-01")
     ap.add_argument("--hasta", default="2026-05")
     ap.add_argument("--suavizado", type=int, default=12, help="ventana de suavizado (meses)")
+    ap.add_argument("--publicar-desde", default=None,
+                    help="recorta la SALIDA a partir de este mes (AAAA-MM). El tramo anterior "
+                         "(colchón) se usa solo para que el suavizado de 12m esté completo al "
+                         "inicio publicado. Ej.: calcular --desde 2023-01 y publicar desde "
+                         "2024-01 (inicio de gestión) ya suavizado.")
     args = ap.parse_args()
 
     idx = pd.period_range(args.desde, args.hasta, freq="M")
@@ -217,6 +222,11 @@ def main() -> int:
     out["cobertura_vars"] = vs.notna().sum(axis=1).astype(int)
     for v in REG:
         out[v["var"]] = (vs[v["var"]] * 100).round(1)
+
+    # El colchón previo (p. ej. 2023) se usó SOLO para que el suavizado de 12m esté completo
+    # al inicio de la ventana publicada; recortar la salida a --publicar-desde.
+    if args.publicar_desde:
+        out = out[out.index >= pd.Period(args.publicar_desde, freq="M")]
 
     out_idx = out.reset_index(names="periodo")
     out_idx["periodo"] = out_idx["periodo"].astype(str)

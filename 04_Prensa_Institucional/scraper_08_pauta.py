@@ -60,7 +60,8 @@ def _to_num(serie: pd.Series) -> pd.Series:
 
 def intensidad_anual(anio: int, s: requests.Session) -> dict | None:
     cache = OUTPUT_DIR / f"_cache_pauta_anual_{anio}.csv"
-    if cache.exists():
+    usar_cache = anio < datetime.now().year   # cachear SOLO años cerrados; el año en curso se recalcula
+    if usar_cache and cache.exists():
         r = pd.read_csv(cache).iloc[0]
         return {"intensidad": float(r["intensidad"]), "pub_dev": float(r["pub_dev"])}
 
@@ -86,7 +87,8 @@ def intensidad_anual(anio: int, s: requests.Session) -> dict | None:
     if tot <= 0:
         return None
     res = {"intensidad": round(pub / tot, 6), "pub_dev": round(pub, 1)}
-    pd.DataFrame([{"anio": anio, **res}]).to_csv(cache, index=False)
+    if usar_cache:
+        pd.DataFrame([{"anio": anio, **res}]).to_csv(cache, index=False)
     log.info("DGSIAF %s: pub_devengado=%.0f millones | intensidad=%.5f (%.4f%% del gasto)",
              anio, pub, res["intensidad"], res["intensidad"] * 100)
     return res

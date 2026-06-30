@@ -12,7 +12,7 @@ Eje 20%. Cobertura = independencia (titularidad) + funcional (vacantes sin cubri
 - **Estado:** OK. STOCK del snapshot oficial + FLUJO vía radar (meses sin nombramiento) + STOCK ESTIMADO del mes corriente desde el padrón vivo.
 - **Fuente:** datos.jus (IP AR); puente nombramientos vía repo
 - **Última actualización:** 2026-06-25
-- **Pendientes:** Reconciliar al salir snapshot oficial nuevo.
+- **Pendientes:** — (la reconciliación con cada snapshot oficial nuevo es automática).
 
 ## Padrón judicial vivo  (`padron_judicial.py`)
 - **Estado:** NUEVO y OK. --construir (base oficial, reconcilia exacto) y --actualizar (aplica ALTAS del radar — 46 designaciones de jun-2026, 0 a revisión — y BAJAS de `bajas_jueces.csv`, que liberan el cargo a Vacante).

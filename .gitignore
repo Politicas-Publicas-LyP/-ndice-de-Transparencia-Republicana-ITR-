@@ -32,3 +32,6 @@ env/
 *.env
 *credentials*.json
 radar-bora-*.json
+
+# Staging de limpieza (archivos seguros de borrar; el equipo elimina la carpeta del disco)
+archivos_borrar/

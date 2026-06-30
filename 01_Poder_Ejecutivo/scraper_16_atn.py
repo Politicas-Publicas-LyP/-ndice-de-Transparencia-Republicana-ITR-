@@ -7,7 +7,9 @@ coparticipación automática. Desde la mirada liberal: más ATN = más palanca p
 sobre los gobernadores y menos correspondencia fiscal = PEOR institucionalidad.
 Su reducción (uso solo para emergencias reales, su fin legal) es una mejora.
 
-  atn_share = devengado en "Aportes del Tesoro Nacional" / devengado TOTAL   (año completo)
+  atn_share          = ATN / devengado TOTAL del AÑO  (VALOR DEL ÍNDICE; estructural anual, ffill)
+  atn_share_mensual  = ATN / devengado TOTAL del MES  (SEGUIMIENTO mes a mes; crédito MENSUAL)
+  atn_var_mom_pp     = variación del share mensual vs el mes anterior (puntos porcentuales)
 
 Share -> INVARIANTE A LA INFLACIÓN. Fuente: DGSIAF crédito ANUAL (mismo origen que
 pauta y costo legislativo). Variable estructural/anual -> serie mensual por
@@ -39,9 +41,14 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 ANUAL = "https://dgsiaf-repo.mecon.gob.ar/repository/pa/datasets/{anio}/credito-anual-{anio}.zip"
+MENSUAL = "https://dgsiaf-repo.mecon.gob.ar/repository/pa/datasets/{anio}/credito-mensual-{anio}.zip"
 OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output"
+# Observaciones mensuales INMUTABLES (publicación): una vez que un mes CERRÓ y quedó observado,
+# su valor no se recalcula en corridas futuras. Es un archivo VERSIONADO (no cache regenerable).
+OBS = OUTPUT_DIR / "atn_obs_mensual.csv"   # OJO: NO usar prefijo "atn_mensual_" (colisiona con el glob atn_mensual_* del ensamblador)
 HEADERS = {"User-Agent": "ITR-LyP/0.1 (politicaspublicas@libertadyprogreso.org)"}
 DEV_COL = "credito_devengado"
+MES_COL = "impacto_presupuestario_mes"
 PATRON = re.compile(r"aportes?\s+del\s+tesoro\s+nacional", re.IGNORECASE)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(message)s",
@@ -64,8 +71,12 @@ def _to_num(serie: pd.Series) -> pd.Series:
 
 
 def atn_anual(anio: int, s: requests.Session) -> dict | None:
+    # Cachear SOLO años CERRADOS (dato definitivo). El año EN CURSO se recalcula en cada
+    # corrida: su devengado crece mes a mes y, si se cacheara, quedaría congelado en el
+    # valor parcial de la primera corrida del año.
     cache = OUTPUT_DIR / f"_cache_atn_{anio}.csv"
-    if cache.exists():
+    usar_cache = anio < datetime.now().year
+    if usar_cache and cache.exists():
         r = pd.read_csv(cache).iloc[0]
         return {"share": float(r["share"]), "atn_dev": float(r["atn_dev"])}
 
@@ -111,10 +122,55 @@ def atn_anual(anio: int, s: requests.Session) -> dict | None:
     log.info("DGSIAF %s: filas ATN=%d | columnas con match: %s", anio, int(mask.sum()),
              {k: v for k, v in hit_cols.items()})
     res = {"share": round(atn / tot, 8), "atn_dev": round(atn, 1)}
-    pd.DataFrame([{"anio": anio, **res}]).to_csv(cache, index=False)
+    if usar_cache:
+        pd.DataFrame([{"anio": anio, **res}]).to_csv(cache, index=False)
     log.info("DGSIAF %s: ATN_devengado=%.0f | share=%.6f (%.4f%% del gasto total)",
              anio, atn, res["share"], res["share"] * 100)
     return res
+
+
+def atn_mensual_share(anio: int, s: requests.Session) -> dict:
+    """Share de ATN POR MES (devengado del mes / total del mes), desde el crédito MENSUAL de
+    DGSIAF. Es SEGUIMIENTO de la discrecionalidad mes a mes; NO es el valor del índice (que
+    sigue siendo el share anual). Devuelve {mes: share}."""
+    cache = OUTPUT_DIR / f"_cache_atn_mensual_{anio}.csv"
+    usar_cache = anio < datetime.now().year
+    if usar_cache and cache.exists():
+        d = pd.read_csv(cache)
+        return dict(zip(d["mes"].astype(int), d["share"]))
+    try:
+        resp = s.get(MENSUAL.format(anio=anio), timeout=240)
+    except Exception as e:  # noqa: BLE001
+        log.warning("DGSIAF mensual %s: fallo (%s)", anio, e); return {}
+    if resp.status_code != 200:
+        log.info("DGSIAF mensual %s: sin archivo (HTTP %s)", anio, resp.status_code); return {}
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        name = max((n for n in zf.namelist() if n.lower().endswith(".csv")),
+                   key=lambda n: zf.getinfo(n).file_size)
+        raw = zf.read(name)
+    header = pd.read_csv(io.BytesIO(raw), nrows=0, dtype=str)
+    desc_cols = [c for c in header.columns if "desc" in c.lower()]
+    if DEV_COL not in header.columns or MES_COL not in header.columns:
+        log.error("DGSIAF mensual %s: faltan columnas (%s / %s)", anio, DEV_COL, MES_COL); return {}
+    use = list(dict.fromkeys([MES_COL] + desc_cols + [DEV_COL]))
+    df = pd.read_csv(io.BytesIO(raw), usecols=use, dtype=str, low_memory=False)
+    df["mes"] = pd.to_numeric(df[MES_COL], errors="coerce")
+    df["dev"] = _to_num(df[DEV_COL])
+    mask = pd.Series(False, index=df.index)
+    for c in desc_cols:
+        mask |= df[c].fillna("").str.contains(PATRON)
+    out = {}
+    for mes in sorted(int(m) for m in df["mes"].dropna().unique()):
+        en_mes = df["mes"] == mes
+        tot = df.loc[en_mes, "dev"].sum()
+        if tot <= 0:
+            continue
+        atn = df.loc[mask & en_mes, "dev"].sum()
+        out[mes] = round(atn / tot, 8)
+    if usar_cache:
+        pd.DataFrame({"mes": list(out), "share": list(out.values())}).to_csv(cache, index=False)
+    log.info("DGSIAF mensual %s: %d meses con dato (share ATN mensual)", anio, len(out))
+    return out
 
 
 def diagnostico(anio: int, s: requests.Session) -> None:
@@ -154,6 +210,11 @@ def main() -> int:
     args = ap.parse_args()
 
     OUTPUT_DIR.mkdir(exist_ok=True)
+    # Limpiar el nombre viejo del store (colisionaba con el glob atn_mensual_* del ensamblador).
+    try:
+        (OUTPUT_DIR / "atn_mensual_obs.csv").unlink()
+    except OSError:
+        pass
     s = session()
     if args.diagnostico:
         diagnostico(args.diagnostico, s)
@@ -170,17 +231,42 @@ def main() -> int:
         print(f"  {a}: ATN_devengado={data[a]['atn_dev']:,.0f} | "
               f"share={data[a]['share']:.6f} ({data[a]['share']*100:.4f}% del gasto)")
 
+    data_m = {a: atn_mensual_share(a, s) for a in anios}   # share ATN por mes
+
+    # INMUTABILIDAD DE PUBLICACIÓN: los meses YA CERRADOS y observados no se recalculan en
+    # corridas futuras; solo se actualiza el mes en curso y se agregan meses nuevos. Así el
+    # histórico Milei se calcula UNA vez con el ATN mensual y queda fijo para publicar.
+    mes_actual = pd.Period(datetime.now().strftime("%Y-%m"), freq="M")
+    obs = {}
+    if OBS.exists():
+        _o = pd.read_csv(OBS, dtype={"periodo": str})
+        obs = dict(zip(_o["periodo"].astype(str), pd.to_numeric(_o["share"], errors="coerce")))
+    for a in anios:
+        for mes, sh in data_m.get(a, {}).items():
+            per = f"{a}-{int(mes):02d}"
+            if pd.Period(per, freq="M") < mes_actual and per in obs:
+                continue   # mes cerrado ya publicado → inmutable
+            obs[per] = sh
+    pd.DataFrame({"periodo": sorted(obs), "share": [obs[k] for k in sorted(obs)]}).to_csv(OBS, index=False)
+
     periods = pd.period_range(args.desde, args.hasta, freq="M")
     rows = []
     for p in periods:
         usable = [a for a in data if a <= p.year]
         if not usable:
-            rows.append({"periodo": str(p), "atn_share": float("nan"), "stale_meses": float("nan")})
+            rows.append({"periodo": str(p), "atn_share": float("nan"),
+                         "atn_share_mensual": float("nan"), "stale_meses": float("nan")})
             continue
         a = max(usable)
+        sm = obs.get(str(p))                 # share mensual INMUTABLE (lo que usa el índice Milei)
+        if sm is None or pd.isna(sm):
+            sm = data[a]["share"]            # FALLBACK al share ANUAL si no hay mensual (no rompe el núcleo viejo)
         stale = 0 if a == p.year else (p - pd.Period(f"{a}-12", "M")).n
-        rows.append({"periodo": str(p), "atn_share": data[a]["share"], "stale_meses": stale})
+        rows.append({"periodo": str(p), "atn_share": data[a]["share"],
+                     "atn_share_mensual": sm, "stale_meses": stale})
     serie = pd.DataFrame(rows)
+    # Variación mes a mes del share ATN (puntos porcentuales) — seguimiento de la discrecionalidad.
+    serie["atn_var_mom_pp"] = (serie["atn_share_mensual"] * 100).diff().round(4)
 
     print("\n=== SERIE MENSUAL (cola) ===")
     print(serie.tail(18).to_string(index=False))

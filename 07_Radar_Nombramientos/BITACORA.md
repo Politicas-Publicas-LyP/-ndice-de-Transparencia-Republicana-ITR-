@@ -17,7 +17,7 @@ output/bajas_jueces.csv. Corre en GitHub Actions (L–V).
   (verificadas en el BORA: decretos 529, 530/2025, etc.). Salida en dos CSV puente.
 - **Fuente:** BORA
 - **Última actualización:** 2026-06-25
-- **Pendientes:** Afinar la etapa del proceso de altas (pliego → acuerdo → decreto).
+- **Pendientes:** —
 
 ## Registro de cambios
 - 2026-06-25 — Reescrito: lectura por fecha + detección sobre el cuerpo (arregla el bug del filtro por título).

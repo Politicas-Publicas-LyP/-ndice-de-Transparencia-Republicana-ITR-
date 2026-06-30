@@ -33,6 +33,8 @@ Motor del índice y configuración transversal.
 - **Pendientes:** —
 
 ## Registro de cambios
+- 2026-06-29 — Limpieza: 51 CSV `*_mensual_*` viejos (duplicados timestamped) movidos a `archivos_borrar/`
+  (ignorada por git); queda 1 por variable. Caches/snapshots intactos. `matplotlib` agregado a requirements.
 - 2026-06-26 — Estados (`sin_suavizar`) ahora persisten por ffill: corrige la inflación de ejes
   en meses parciales cuando un estado no tiene fila nueva (Designación Pdte. BCRA, presupuesto aprobado).
 - 2026-06-25 — Override de cobertura ESTIMADA del mes corriente desde el padrón vivo (vía scraper_05).

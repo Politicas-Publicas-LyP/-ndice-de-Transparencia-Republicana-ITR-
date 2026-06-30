@@ -19,7 +19,7 @@ variables:
       {archivo: transparencia_v2_mensual, col: tasa_respuesta, mejor: 0.95, peor: 0.30, peso_intra: 0.4, modo: suavizado},
       {archivo: transparencia_v2_mensual, col: tasa_en_plazo, mejor: 0.90, peor: 0.20, peso_intra: 0.6, modo: suavizado}]}
   - {var: "ATN (federalismo)", eje: Ejecutivo, peso: 0.06, nucleo: true, comp: [
-      {archivo: atn_mensual, col: atn_share, mejor: 0.001, peor: 0.007, peso_intra: 1.0, modo: suavizado}]}
+      {archivo: atn_mensual, col: atn_share_mensual, mejor: 0.001, peor: 0.007, peso_intra: 1.0, modo: suavizado}]}
   - {var: "Eficacia de Control", eje: Legislativo, peso: 0.12, nucleo: true, comp: [
       {archivo: eficacia_control_mensual, col: cumplimiento_art101_12m, mejor: 0.75, peor: 0.10, peso_intra: 1.0, modo: suavizado}]}
   - {var: "Calidad Normativa", eje: Legislativo, peso: 0.10, nucleo: true, comp: [

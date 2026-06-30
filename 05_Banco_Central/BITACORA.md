@@ -43,7 +43,7 @@ Eje 15%.
 - **Fuente:** BORA (`/seccion/primera/AAAAMMDD`, decisión por el cuerpo del decreto).
 - **Salida:** `output/bcra_presidencia_eventos.csv` (alerta, no toca el valor publicado).
 - **Última actualización:** 2026-06-25
-- **Pendientes:** Detector de Vicepresidente/Directorio (si se decide ampliar el alcance).
+- **Pendientes:** —
 
 ## Registro de cambios
 - 2026-06-25 — Bitácora creada.

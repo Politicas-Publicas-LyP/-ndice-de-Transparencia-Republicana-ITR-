@@ -62,7 +62,8 @@ EXCLUIR = "auditor|defensor|penitenciaria|tortura|cnpt"
 
 def costo_anual(anio: int, s: requests.Session, diag: bool) -> dict[int, float]:
     cache = OUTPUT_DIR / f"_cache_costoleg_v2_{anio}.csv"
-    if cache.exists():
+    usar_cache = anio < datetime.now().year   # cachear SOLO años cerrados; el año en curso se recalcula
+    if usar_cache and cache.exists():
         d = pd.read_csv(cache)
         return dict(zip(d["mes"].astype(int), d["share"]))
 
@@ -96,7 +97,8 @@ def costo_anual(anio: int, s: requests.Session, diag: bool) -> dict[int, float]:
             continue
         legdev = sub.loc[legcore & (df["mes"] == mes), "dev"].sum()
         out[mes] = round(legdev / tot, 6)
-    pd.DataFrame({"mes": list(out), "share": list(out.values())}).to_csv(cache, index=False)
+    if usar_cache:
+        pd.DataFrame({"mes": list(out), "share": list(out.values())}).to_csv(cache, index=False)
     log.info("DGSIAF %s: costo legislativo (share) dic≈ %s", anio, out.get(12, out.get(max(out) if out else 0)))
     return out
 
