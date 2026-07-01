@@ -255,6 +255,30 @@ def construir(verbose: bool = False) -> int:
         muestra = [c for c in [CAM, TIP, NOM, PRO, MAG, CC] if c]
         print("\n=== EJEMPLOS (8 cargos) ===")
         print(df[muestra].head(8).to_string(index=False))
+        # DIAGNÓSTICO para la variable "duración de vacancia": qué campos de fecha hay y con
+        # cuánta cobertura en los cargos NO titulares (para elegir bien cómo medir la antigüedad).
+        no_tit = df[df[CC].astype(str).str.strip().str.lower() != "titular"] if CC else df
+        print(f"\n=== CAMPOS DE FECHA (cargos NO titulares: {len(no_tit)}) ===")
+        for fcol in ["concurso_ambito_fecha_ingreso", "subrogancia_fecha_vencimiento",
+                     "cargo_fecha_jura", "norma_fecha", "concurso_en_tramite"]:
+            c = _g(cols, fcol)
+            if c:
+                nn = int(no_tit[c].notna().sum() - (no_tit[c].astype(str).str.strip() == "").sum())
+                ej = list(no_tit[c].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique()[:5])
+                print(f"  {fcol}: {nn}/{len(no_tit)} con dato | ej: {ej}")
+            else:
+                print(f"  {fcol}: (no está en el dataset)")
+        # Distribución de ANTIGÜEDAD del concurso (meses) en cargos NO titulares → para calibrar anclas.
+        ci = _g(cols, "concurso_ambito_fecha_ingreso")
+        if ci:
+            fi = pd.to_datetime(no_tit[ci], errors="coerce")
+            ant = ((pd.Timestamp(fecha) - fi).dt.days / 30.44).dropna()
+            if len(ant):
+                print(f"\n=== ANTIGÜEDAD del concurso en cargos NO titulares (meses; snapshot {fecha.date()}) ===")
+                print(f"  n={len(ant)}  mediana={ant.median():.1f}  media={ant.mean():.1f}  "
+                      f"p25={ant.quantile(.25):.1f}  p75={ant.quantile(.75):.1f}  p90={ant.quantile(.90):.1f}  max={ant.max():.1f}")
+                for u in (12, 24, 36, 48, 60):
+                    print(f"  share con concurso > {u:>2}m sin resolver: {(ant > u).mean():.3f}")
 
     rows = []
     for _, r in df.iterrows():
